@@ -1,0 +1,130 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.SignalR.Client
+@using System.Security.Cryptography
+@using CryptoAndHash
+@inject NavigationManager NavMAnager
+@implements IAsyncDisposable
+
+
+<div class="form-group">
+    <label>
+        User: <input @bind="userInput" />
+    </label>
+</div>
+<div class="form-group">
+    <label>
+        Message: <input @bind="messageInput" />
+    </label>
+</div>
+<button @onclick="Send" disabled="@(IsConnected == false)">Send</button>
+
+<hr />
+<ul>
+    @foreach (string message in messages)
+    {
+        <li>@message</li>
+    }
+</ul>
+
+
+@code {
+    private HubConnection? hubConnection;
+    private List<string> messages = new();
+    private string? userInput;
+    private string? messageInput;
+    private string? publicKey = null;
+    private string? key = null;
+    private string? iv = null;
+    CryptoRSA rsa = new();
+
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        //Setting the connection
+        hubConnection = new HubConnectionBuilder()
+       .WithUrl(NavMAnager.ToAbsoluteUri("/chathub"))
+       .WithAutomaticReconnect() //Reconnects if connection is lost
+       .Build();
+
+        hubConnection.On<string>("ReceivePublicKey", (publicKeyString) =>
+        {
+            publicKey = publicKeyString;
+
+            if (publicKey != null)
+            {
+                byte[] publicByteKey = Convert.FromBase64String(publicKey);
+                (byte[] byteKey, byte[] byteIV) = rsa.EncryptRSA(publicByteKey);
+                key = Convert.ToBase64String(byteKey);
+                iv = Convert.ToBase64String(byteIV);
+
+            }
+
+            InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<string>("ReceiveKey", (keyString) =>
+        {
+            key = keyString;
+
+            if (hubConnection is not null && key != null)
+            {
+                hubConnection.SendAsync("SendKey", key); //sending the public key
+            }
+            //SendKey();
+
+            InvokeAsync(StateHasChanged);
+        });
+
+        hubConnection.On<string>("ReceiveIV", (ivString) =>
+        {
+            iv = ivString;
+
+            if (hubConnection is not null && iv != null)
+            {
+                hubConnection.SendAsync("SendIV", iv); //sending the IVy
+            }
+
+            //SendIV();
+            InvokeAsync(StateHasChanged);
+        });
+
+
+        //Clientside (Yep server is also a client!)
+        hubConnection.On<string, string>("ReceiveMessage", (user, message) =>
+        {
+            var formattedMessage = $"{user}: {message}";
+            messages.Add(formattedMessage);
+            InvokeAsync(StateHasChanged);
+        });
+
+
+    }
+
+
+
+
+    //Sending message to the hub
+    private async Task Send()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.SendAsync("SendMessage", userInput, messageInput); //Calling the chathub method SendMessage
+        }
+    }
+
+
+    public bool IsConnected => hubConnection?.State == HubConnectionState.Connected; //Checking if we are connected
+
+
+    //Method to safely close down connection
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+}
+

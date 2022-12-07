@@ -36,7 +36,7 @@ namespace API.Controllers
 
 
         /// <summary>
-        /// Creating Keys, Encrypting them, and sending the EAS keys to client, and saving them for other clients as well
+        /// Creating Keys, Encrypting EAS keys, and sending the EAS keys to client, and saving them for other clients as well
         /// </summary>
         /// <param name="keyInput"></param>
         /// <returns></returns>
@@ -51,14 +51,14 @@ namespace API.Controllers
                 {
                     AESKey aesKey = new();
                     RSAKey rsaKey = new();
-                    (byte[] byteKey, byte[] byteIV) = rsa.EncryptRSA(byteKeyInput, tempAes);
+                    (byte[] byteKey, byte[] byteIV) = rsa.EncryptRSA(byteKeyInput, tempAes); // Encrypting the AES keys with the client RSA public key
                     key = byteKey;
                     iv = byteIV;
                     aesKey.Key = Convert.ToBase64String(byteKey);
                     aesKey.Iv = Convert.ToBase64String(byteIV);
                     string aesJson = JsonSerializer.Serialize(aesKey);
 
-                    return StatusCode(200, aesJson);
+                    return StatusCode(200, aesJson); //Returning the encrypted AES keys as json
                 }
 
                 return StatusCode(401, "Something went wrong");
